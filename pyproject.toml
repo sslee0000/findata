@@ -1,0 +1,33 @@
+[project]
+name = "findata"
+version = "0.1.0"
+description = "개인 재테크용 금융 데이터 공용 라이브러리 — 환율/주식지수/서울 실거래가/네이버 부동산 매물"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "requests>=2.31",
+    "pyarrow>=15.0",          # parquet 캐시
+    "finance-datareader>=0.9.90",  # 환율/국내외 지수 단일 인터페이스
+    "publicdatareader>=1.1.0",     # ECOS(한국은행)·국토부 실거래가 래핑
+]
+
+[project.optional-dependencies]
+# 필요할 때만: 국내 상세는 pykrx, 해외 상세는 yfinance
+extra = ["pykrx>=1.2.0", "yfinance>=0.2.40"]
+dev = ["pytest>=8.0", "ruff>=0.5"]
+# 라이브러리 테스트용 데모 웹페이지
+demo = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
+
+[project.scripts]
+findata-naver = "findata.naver:_cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/findata"]
+
+[tool.ruff]
+line-length = 100

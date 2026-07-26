@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>findata 테스트</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --line:#2a2f3a; --fg:#e6e8ec; --mut:#9aa3b2; --acc:#4f8cff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:20px 24px; border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:18px; }
+  header p { margin:4px 0 0; color:var(--mut); font-size:13px; }
+  .tabs { display:flex; gap:8px; padding:16px 24px 0; }
+  .tab { padding:8px 16px; border:1px solid var(--line); border-radius:8px 8px 0 0; cursor:pointer; background:transparent; color:var(--mut); }
+  .tab.active { background:var(--card); color:var(--fg); border-bottom-color:var(--card); }
+  main { padding:0 24px 40px; }
+  .panel { display:none; background:var(--card); border:1px solid var(--line); border-radius:0 10px 10px 10px; padding:20px; }
+  .panel.active { display:block; }
+  .controls { display:flex; flex-wrap:wrap; gap:12px; align-items:end; margin-bottom:18px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--mut); }
+  input, select { background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:7px 9px; font-size:14px; }
+  button.go { background:var(--acc); color:#fff; border:none; border-radius:6px; padding:9px 18px; cursor:pointer; font-size:14px; }
+  button.go:disabled { opacity:.5; cursor:default; }
+  .status { color:var(--mut); font-size:13px; margin:10px 0; min-height:18px; }
+  .note { color:#ffb454; }
+  canvas { max-height:340px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; margin-top:12px; }
+  th, td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--mut); font-weight:600; position:sticky; top:0; background:var(--card); }
+  .tablewrap { max-height:420px; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>findata 테스트 콘솔</h1>
+  <p>라이브러리를 실제 소비 repo처럼 import해서 각 모듈을 눌러봅니다.</p>
+</header>
+
+<div class="tabs">
+  <button class="tab active" data-tab="fx">환율</button>
+  <button class="tab" data-tab="idx">주가지수</button>
+  <button class="tab" data-tab="re">서울 실거래가</button>
+  <button class="tab" data-tab="nv">네이버 매물</button>
+</div>
+
+<main>
+  <!-- 환율 -->
+  <section class="panel active" id="fx">
+    <div class="controls">
+      <label>기준<input id="fx-base" value="USD" size="5"></label>
+      <label>상대<input id="fx-quote" value="KRW" size="5"></label>
+      <label>시작<input id="fx-start" type="date" value="2024-01-01"></label>
+      <label>끝<input id="fx-end" type="date"></label>
+      <button class="go" onclick="loadFx()">조회</button>
+    </div>
+    <div class="status" id="fx-status"></div>
+    <canvas id="fx-chart"></canvas>
+  </section>
+
+  <!-- 지수 -->
+  <section class="panel" id="idx">
+    <div class="controls">
+      <label>지수<select id="idx-name"></select></label>
+      <label>시작<input id="idx-start" type="date" value="2024-01-01"></label>
+      <label>끝<input id="idx-end" type="date"></label>
+      <button class="go" onclick="loadIdx()">조회</button>
+    </div>
+    <div class="status" id="idx-status"></div>
+    <canvas id="idx-chart"></canvas>
+  </section>
+
+  <!-- 실거래가 -->
+  <section class="panel" id="re">
+    <div class="controls">
+      <label>자치구<select id="re-gu"></select></label>
+      <label>계약년월<input id="re-ym" value="202406" size="7" placeholder="YYYYMM"></label>
+      <button class="go" onclick="loadRe()">조회</button>
+    </div>
+    <div class="status" id="re-status"></div>
+    <div class="tablewrap"><table id="re-table"></table></div>
+  </section>
+
+  <!-- 네이버 매물 -->
+  <section class="panel" id="nv">
+    <div class="controls">
+      <label>단지명 검색
+        <input id="nv-q" placeholder="예: 신동아리버파크" size="20"
+               onkeydown="if(event.key==='Enter'){searchComplex();}">
+      </label>
+      <button class="go" onclick="searchComplex()">단지 찾기</button>
+      <label>단지<select id="nv-complex" style="min-width:200px"><option value="">— 먼저 검색하세요 —</option></select></label>
+      <label>거래유형<select id="nv-trade"><option>매매</option><option>전세</option><option>월세</option></select></label>
+      <button class="go" onclick="loadListings()">매물 조회</button>
+    </div>
+    <div class="status" id="nv-status">단지명을 검색해 선택한 뒤 <b>매물 조회</b>를 누르세요.</div>
+    <div class="tablewrap"><table id="nv-table"></table></div>
+  </section>
+</main>
+
+<script>
+// 탭 전환
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById(t.dataset.tab).classList.add('active');
+});
+
+let fxChart, idxChart;
+function lineChart(canvasId, existing, labels, data, label) {
+  if (existing) existing.destroy();
+  return new Chart(document.getElementById(canvasId), {
+    type: 'line',
+    data: { labels, datasets: [{ label, data, borderColor: '#4f8cff', borderWidth: 1.5, pointRadius: 0, tension: .15 }] },
+    options: { responsive: true, plugins: { legend: { labels: { color: '#9aa3b2' } } },
+      scales: { x: { ticks: { color: '#9aa3b2', maxTicksLimit: 8 }, grid: { color: '#2a2f3a' } },
+                y: { ticks: { color: '#9aa3b2' }, grid: { color: '#2a2f3a' } } } }
+  });
+}
+
+async function loadFx() {
+  const b = fxBase.value, q = fxQuote.value, s = fxStart.value, e = fxEnd.value;
+  const st = document.getElementById('fx-status'); st.textContent = '불러오는 중…';
+  const url = `/api/fx?base=${b}&quote=${q}&start=${s}` + (e ? `&end=${e}` : '');
+  try {
+    const r = await (await fetch(url)).json();
+    const rows = r.rows;
+    if (!rows.length) { st.textContent = '데이터 없음'; return; }
+    fxChart = lineChart('fx-chart', fxChart, rows.map(x => x.date), rows.map(x => x.Close), r.symbol);
+    st.textContent = `${rows.length}행 · 최근 종가 ${rows[rows.length-1].Close}`;
+  } catch (err) { st.textContent = '오류: ' + err; }
+}
+const fxBase=document.getElementById('fx-base'), fxQuote=document.getElementById('fx-quote'),
+      fxStart=document.getElementById('fx-start'), fxEnd=document.getElementById('fx-end');
+
+async function loadIdx() {
+  const n = document.getElementById('idx-name').value, s = document.getElementById('idx-start').value, e = document.getElementById('idx-end').value;
+  const st = document.getElementById('idx-status'); st.textContent = '불러오는 중…';
+  const url = `/api/index?name=${encodeURIComponent(n)}&start=${s}` + (e ? `&end=${e}` : '');
+  try {
+    const r = await (await fetch(url)).json();
+    const rows = r.rows;
+    if (!rows.length) { st.textContent = '데이터 없음'; return; }
+    idxChart = lineChart('idx-chart', idxChart, rows.map(x => x.date), rows.map(x => x.Close), r.name);
+    st.textContent = `${rows.length}행 · 최근 종가 ${rows[rows.length-1].Close}`;
+  } catch (err) { st.textContent = '오류: ' + err; }
+}
+
+async function loadRe() {
+  const gu = document.getElementById('re-gu').value, ym = document.getElementById('re-ym').value;
+  const st = document.getElementById('re-status'), tbl = document.getElementById('re-table');
+  st.textContent = '불러오는 중…'; tbl.innerHTML = '';
+  try {
+    const r = await (await fetch(`/api/seoul-trades?gu=${encodeURIComponent(gu)}&ym=${ym}`)).json();
+    if (r.note) { st.innerHTML = '<span class="note">키 필요: ' + r.note + '</span>'; return; }
+    const rows = r.rows;
+    if (!rows.length) { st.textContent = '데이터 없음'; return; }
+    const cols = Object.keys(rows[0]).slice(0, 12);
+    tbl.innerHTML = '<thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead>'
+      + '<tbody>' + rows.map(row => '<tr>' + cols.map(c => `<td>${row[c] ?? ''}</td>`).join('') + '</tr>').join('') + '</tbody>';
+    st.textContent = `${rows.length}건`;
+  } catch (err) { st.textContent = '오류: ' + err; }
+}
+
+// ---------- 네이버 매물 ----------
+async function searchComplex() {
+  const q = document.getElementById('nv-q').value.trim();
+  const st = document.getElementById('nv-status'), sel = document.getElementById('nv-complex');
+  if (!q) { st.textContent = '단지명을 입력하세요.'; return; }
+  st.textContent = `'${q}' 검색 중…`;
+  try {
+    const r = await (await fetch(`/api/naver/search?q=${encodeURIComponent(q)}`)).json();
+    if (r.note) { st.innerHTML = '<span class="note">검색 실패: ' + r.note + '</span>'; return; }
+    const cands = r.candidates || [];
+    if (!cands.length) {
+      sel.innerHTML = '<option value="">— 결과 없음 —</option>';
+      st.innerHTML = '<span class="note">단지를 못 찾았습니다. 정확한 단지명으로 다시 시도해 보세요.</span>';
+      return;
+    }
+    sel.innerHTML = cands.map(c => `<option value="${c.hscpNo}">${c.name} (${c.hscpNo})</option>`).join('');
+    st.textContent = `${cands.length}개 단지 발견 — 선택 후 [매물 조회]`;
+  } catch (err) { st.textContent = '오류: ' + err; }
+}
+
+const won = v => {                    // 원 → 억/만원 표기
+  if (!v) return '';
+  const eok = Math.floor(v / 100000000), man = Math.round((v % 100000000) / 10000);
+  return eok ? `${eok}억${man ? ' ' + man.toLocaleString() : ''}` : man.toLocaleString() + '만';
+};
+
+async function loadListings() {
+  const no = document.getElementById('nv-complex').value;
+  const trade = document.getElementById('nv-trade').value;
+  const st = document.getElementById('nv-status'), tbl = document.getElementById('nv-table');
+  if (!no) { st.textContent = '먼저 단지를 검색해 선택하세요.'; return; }
+  st.textContent = '매물 불러오는 중…'; tbl.innerHTML = '';
+  try {
+    const r = await (await fetch(`/api/naver/listings?complexNo=${no}&trade=${encodeURIComponent(trade)}`)).json();
+    if (r.note) { st.innerHTML = '<span class="note">' + r.note + '</span>'; return; }
+    const rows = r.rows || [];
+    if (!rows.length) { st.textContent = '매물 0건'; return; }
+    const price = x => trade === '매매' ? won(x.dealPrice)
+      : (won(x.warrantyPrice) + (x.rentPrice ? ' / 월' + Math.round(x.rentPrice / 10000) : ''));
+    const cols = [['동','dongName'],['가격',null],['전용㎡','exclusiveSpace'],['층','floorInfo'],
+                  ['향','direction'],['확인일','confirmDate'],['중개사','brokerage'],['특징','feature']];
+    tbl.innerHTML = '<thead><tr>' + cols.map(c => `<th>${c[0]}</th>`).join('') + '</tr></thead><tbody>'
+      + rows.map(x => '<tr>' + cols.map(c =>
+          `<td>${c[1] === null ? price(x) : (x[c[1]] ?? '')}</td>`).join('') + '</tr>').join('')
+      + '</tbody>';
+    st.textContent = `${rows.length}건 (${trade})`;
+  } catch (err) { st.textContent = '오류: ' + err; }
+}
+
+// 메타 로드 → 드롭다운 채우기
+fetch('/api/meta').then(r => r.json()).then(m => {
+  document.getElementById('idx-name').innerHTML = m.indices.map(x => `<option>${x}</option>`).join('');
+  document.getElementById('re-gu').innerHTML = m.seoul_gu.map(x => `<option>${x}</option>`).join('');
+});
+loadFx();
+</script>
+</body>
+</html>
