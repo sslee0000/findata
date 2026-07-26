@@ -1,0 +1,18 @@
+[Unit]
+Description=findata demo (public, behind Tailscale Funnel)
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/workspace/finance/findata
+# 공개 모드: 응답 캐시 + IP당 rate limit + 네이버 화이트리스트
+Environment=FINDATA_PUBLIC=1
+Environment=PORT=8000
+EnvironmentFile=-%h/workspace/finance/findata/.env
+ExecStart=%h/workspace/finance/findata/run_demo.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

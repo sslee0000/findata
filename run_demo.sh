@@ -20,11 +20,18 @@ PORT="${PORT:-8000}"
 if [ -f .env ]; then set -a; . ./.env; set +a; fi
 
 # 3) 접속 주소 안내 (LAN IP 자동 탐지)
-LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+LAN_IP="$(ip -4 -o addr show scope global 2>/dev/null | grep -v tailscale0 | awk '{print $4}' | cut -d/ -f1 | head -1)"
 echo "──────────────────────────────────────────────"
 echo "  findata 데모 실행 중"
 echo "  이 PC:        http://localhost:${PORT}"
 [ -n "${LAN_IP:-}" ] && echo "  같은 네트워크: http://${LAN_IP}:${PORT}"
+if [ "${FINDATA_PUBLIC:-}" = "1" ]; then
+  TS_NAME="$(tailscale status --json 2>/dev/null | sed -n 's/.*"DNSName":[[:space:]]*"\([^"]*\)\.".*/\1/p' | head -1)"
+  echo "  공개 모드:    ON (캐시 + rate limit + 네이버 화이트리스트)"
+  [ -n "${TS_NAME:-}" ] && echo "  인터넷 공개:  https://${TS_NAME}/   ← Funnel 실행 중일 때"
+else
+  echo "  공개 모드:    OFF (로컬 전용) — 인터넷 공개 시 FINDATA_PUBLIC=1 로 실행"
+fi
 echo "  (방화벽에서 ${PORT}/tcp 인바운드 허용 필요할 수 있음)"
 echo "  종료: Ctrl+C"
 echo "──────────────────────────────────────────────"
