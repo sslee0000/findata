@@ -217,6 +217,13 @@ async function loadListings() {
 fetch('/api/meta').then(r => r.json()).then(m => {
   document.getElementById('idx-name').innerHTML = m.indices.map(x => `<option>${x}</option>`).join('');
   document.getElementById('re-gu').innerHTML = m.seoul_gu.map(x => `<option>${x}</option>`).join('');
+  // 공개 데모에서는 허용된 단지를 미리 채워, 검색 없이 바로 고를 수 있게 한다.
+  if (m.public && m.allowedComplexes && m.allowedComplexes.length) {
+    document.getElementById('nv-complex').innerHTML =
+      m.allowedComplexes.map(c => `<option value="${c.hscpNo}">${c.name}</option>`).join('');
+    document.getElementById('nv-status').innerHTML =
+      '공개 데모라 아래 예시 단지만 조회할 수 있습니다. 단지를 고르고 <b>매물 조회</b>를 누르세요.';
+  }
 });
 loadFx();
 </script>
